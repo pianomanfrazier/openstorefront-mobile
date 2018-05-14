@@ -1,12 +1,13 @@
 <template>
 <div>
-  <form v-on:submit.prevent="submitSearch" >
+  <form v-on:submit.prevent="newSearch()" >
     <div class="searchbar">
       <input v-model="searchQuery" class="searchfield" type="text" placeholder="Search">
       <v-icon class="icon">search</v-icon>
     </div>
+
     <v-btn small @click="show = !show" flat>
-      <v-icon v-if="show">arrow_drop_down</v-icon><v-icon v-if="!show">arrow_right</v-icon>
+      <v-icon v-if="show">arrow_drop_up</v-icon><v-icon v-if="!show">arrow_drop_down</v-icon>
       Add Search Filters
     </v-btn>
     <v-btn small @click="clear()" v-if="selected.length !== 0">Clear Filters</v-btn>
@@ -18,18 +19,26 @@
           v-for="item in selected"
           v-bind:key="item">
           {{ item }}
-          <div style="display: inline-block; cursor: pointer;" @click="deleteItem(item)">&times;</div>
+          <div
+            style="display: inline-block; cursor: pointer;"
+            @click="deleteItem(item)"
+          >&times;</div>
         </div>
       </transition-group>
     </div>
+
     <div v-if="show" transition="slide-y-transition">
       <v-list>
         <v-expansion-panel>
-          <v-expansion-panel-content v-for="item in items" :key="item.label">
+          <v-expansion-panel-content
+            v-for="item in items"
+            :key="item.label"
+            expand-icon="arrow_drop_down"
+          >
             <div slot="header">{{ item.label }}</div>
             <v-list-tile v-for="data in item.data" :key="data">
               <v-list-tile-action>
-                <v-checkbox @click="log(item.color)" v-model="selected" :value="data"></v-checkbox>
+                <v-checkbox v-model="selected" :value="data"></v-checkbox>
               </v-list-tile-action>
               <v-list-tile-title>{{ data }}</v-list-tile-title>
             </v-list-tile>
@@ -39,56 +48,114 @@
     </div>
   </form>
   <!-- show some results on text entry -->
-  <div>
-    Search Query: {{ searchQuery }}
-  </div>
-  <v-progress-circular v-if="searchQueryIsDirty" indeterminate color="primary"></v-progress-circular>
+
+  <h2 v-if="searchResults.data" style="text-align: center">Search Results</h2>
+  <p v-if="searchResults.data">
+    <span v-if="searchQueryIsDirty">Fetching</span><span v-else>Showing</span>
+    results {{ offset + 1 }} - {{ totalSearchResults > offset + searchPageSize ? offset + searchPageSize : totalSearchResults }} of
+    {{ searchResults.data.totalNumber }} results</p>
+  <v-progress-circular
+    v-if="searchQueryIsDirty"
+    indeterminate color="primary"
+  ></v-progress-circular>
+
   <div v-bind:class="{old: searchQueryIsDirty}">
-    Results: {{ searchResults }}
+    <div v-if="searchResults.data">
+
+      <ul>
+        <li v-for="item in searchResults.data.data" :key="item">
+          {{ item.name }}
+        </li>
+      </ul>
+
+      <div style="text-align: center;">
+        <v-btn
+          flat
+          icon
+          v-if="offset > 0" @click="prevPage()">
+        <v-icon x-large>chevron_left</v-icon>
+        </v-btn>
+        <v-btn
+          flat
+          icon
+          v-if="offset + searchPageSize < totalSearchResults" @click="nextPage()">
+          <v-icon x-large>chevron_right</v-icon>
+        </v-btn>
+      </div>
+
+    </div>
+  </div>
+
+  <div v-if="errors.length > 0">
+    <ul>
+      <li v-for="error in errors" :key="error">
+        {{ error }}
+      </li>
+    </ul>
   </div>
 </div>
 </template>
 
 <script>
 import _ from 'lodash';
+import axios from 'axios';
 
 export default {
   name: 'SearchBar',
   methods: {
-    clear () {
+    clear() {
       this.selected = [];
     },
-    deleteItem (item) {
-      this.selected = _.remove(this.selected, function(n) {
-        return n !== item;
-      })
+    deleteItem(item) {
+      this.selected = _.remove(this.selected, n => n !== item);
     },
-    log (item) {
-      console.log(item)
-    },
-    submitSearch () {
+    submitSearch() {
       this.searchQueryIsDirty = true;
-      setTimeout( function() {
-        this.searchResults = "Submit Search ..."
-        this.searchQueryIsDirty = false;
-      }.bind(this),500);
-    }
+      let that = this;
+      axios
+        .post(`/openstorefront/api/v1/service/search/advance?paging=true&sortField=searchScore&sortOrder=${that.searchSortOrder}&offset=${that.searchPage * that.searchPageSize}&max=${that.searchPageSize}`, {
+          searchElements: [
+            {
+              mergeCondition: 'AND',
+              searchType: 'INDEX',
+              value: that.searchQuery.trim() ? `*${that.searchQuery}*` : '***',
+            },
+          ],
+        })
+        .then((response) => {
+          that.searchResults = response;
+          that.totalSearchResults = response.data.totalNumber;
+          that.searchQueryIsDirty = false;
+        })
+        .catch(e => (this.errors.push(e)))
+        .finally(() => { that.searchQueryIsDirty = false; });
+    },
+    newSearch() {
+      this.searchPage = 0;
+      this.submitSearch();
+    },
+    nextPage() {
+      this.searchPage += 1;
+      this.submitSearch();
+    },
+    prevPage() {
+      if (this.searchPage > 0) {
+        this.searchPage -= 1;
+        this.submitSearch();
+      }
+    },
   },
   watch: {
-    searchQuery: _.throttle( function() {
-      this.searchQueryIsDirty = true;
-      // some expensive query
-      setTimeout( function() {
-        this.searchResults = "Some search results ..."
-        this.searchQueryIsDirty = false;
-      }.bind(this),500);
-    }, 1000)
+    // searchQuery: _.throttle(function () {
+    //   this.searchQueryIsDirty = true;
+    //   // some expensive query
+    // }, 1000),
   },
-  // computed: {
-  //   searchResults: function () {
-
-  //   }
-  // },
+  computed: {
+    offset() {
+      return this.searchPage * this.searchPageSize;
+    },
+  },
   data() {
     return {
       items: [
@@ -99,8 +166,13 @@ export default {
       selected: [],
       show: false,
       searchQuery: '',
-      searchResults: '',
-      searchQueryIsDirty: false
+      searchResults: {},
+      searchQueryIsDirty: false,
+      errors: [],
+      searchPage: 0,
+      searchPageSize: 10,
+      totalSearchResults: 0,
+      searchSortOrder: 'DESC',
     };
   },
 };
