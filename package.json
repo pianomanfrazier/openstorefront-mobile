@@ -1,7 +1,7 @@
 {
-  "name": "client-login",
+  "name": "openstorefront-mobile",
   "version": "1.0.0",
-  "description": "Openstorefront login portal",
+  "description": "Openstorefront mobile",
   "author": "Ryan Frazier <pianomanfrazier@gmail.com>",
   "private": true,
   "scripts": {
