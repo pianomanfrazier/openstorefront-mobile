@@ -1,5 +1,5 @@
 <template>
-  <v-footer height="auto" class="grey darken-3">
+  <v-footer height="auto" class="secondary darken-3">
     <v-layout row wrap justify-center>
       <v-btn
         v-for="link in links"
@@ -21,7 +21,7 @@ export default {
   name: 'Footer',
   data() {
     return {
-      links: ['Home', 'About', 'FAQ']
+      links: ['Home', 'About', 'FAQ'],
     };
   },
 };
